@@ -15,12 +15,36 @@ from torch import nn
 
 from sklearn.metrics.pairwise import cosine_similarity
 
+def detach(data):
+    if isinstance(data, list):
+        return [d.detach() for d in data]
+    elif isinstance(data, dict):
+        res = {}
+        for k,v in data.items():
+            res[k] = detach(v)
+        return res
+    elif isinstance(data, torch.Tensor):
+        return data.detach()
+    else:
+        raise TypeError(f"Unexpected type {type(data)}")
+
+def to_device(data, device="cuda"):
+    if isinstance(data, list):
+        return [d.to(device) for d in data]
+    elif isinstance(data, dict):
+        res = dict()
+        for k,v in data.items():
+            res[k] = to_device(v, device)
+        return res
+    elif isinstance(data, torch.Tensor):
+        return data.to(device)
+    else:
+        raise TypeError(f"Unexpected type {type(data)}")
 
 def get_actual_model(net):
     if isinstance(net, nn.DataParallel):
         return net.module
     return net
-
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -56,12 +80,6 @@ def pairwise_cosine_similarity(X, Y=None):
         Yp = Xp
     Z = cosine_similarity(Xp, Yp)
     return torch.tensor(Z).to(device)
-
-
-def to_device(data, device):
-    res = [d.to(device) for d in data]
-    return res
-
 
 def clear_torch_cache():
     torch.cuda.empty_cache()

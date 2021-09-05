@@ -1,6 +1,7 @@
 
 
 import os
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 import sys
 from pathlib import Path
 import datetime
@@ -19,7 +20,6 @@ import warnings
 import logging
 import PIL
 from pprint import pprint
-os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -28,7 +28,7 @@ import torch.distributed as dist
 import torch.optim as optim
 import torch.multiprocessing as mp
 import torch.utils.data
-import torch.utils.data.distributed
+import torch.utils.data.distributed as dist
 import torchvision
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
@@ -42,6 +42,9 @@ from .py_logger import Logger, log_args
 class TorchEngine(Experiment):
 
     def start(self):
+        if self.args.cudnn_benchmark:
+            cudnn.benchmark = True
+
         if self.args.seed is not None:
             random.seed(self.args.seed)
             torch.manual_seed(self.args.seed)
@@ -69,17 +72,6 @@ class TorchEngine(Experiment):
         self.args = args
         pprint(vars(self.args))
 
-        # if args.multiprocessing_distributed:
-        #     # Since we have ngpus_per_node processes per node, the total world_size
-        #     # needs to be adjusted accordingly
-        #     args.world_size = ngpus_per_node * args.world_size
-        #     # Use torch.multiprocessing.spawn to launch distributed processes: the
-        #     # main_worker process function
-        #     mp.spawn(self.main_worker, nprocs=ngpus_per_node, args=(ngpus_per_node, args))
-        # else:
-        #     # Simply call main_worker function
-        #     self.main_worker(args.gpu, args.ngpus_per_node, args)
-
         if not self.use_mlflow:
             print("not using mlflow")
             self.run()
@@ -89,15 +81,11 @@ class TorchEngine(Experiment):
             mlflow.set_tracking_uri(self.mlflow_server)
             experiment_id = mlflow.set_experiment(str(self.mlflow_dir))
             with mlflow.start_run(experiment_id=experiment_id):
-                #
-                # Log the run parametres to mlflow.
-                #
                 mlflow.log_param("base_dir", str(self.base_dir))
                 mlflow.log_param("comment", self.comment)
-
                 for k, v in sorted(vars(self.args).items()):
                     mlflow.log_param(k, v)
-
+                # start the program
                 self.run()
 
     def run(self):
@@ -122,7 +110,7 @@ class TorchEngine(Experiment):
         logger = log_master.getLogger(f"main")
 
         if args.gpu is not None:
-            print("Using GPU: {}".format(args.gpu))
+            logger.info("Using GPU: {}".format(args.gpu))
 
         if args.distributed:
             if args.dist_url == "env://" and args.rank == -1:
@@ -133,7 +121,6 @@ class TorchEngine(Experiment):
                 args.rank = args.rank * ngpus_per_node + gpu
             dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                                     world_size=args.world_size, rank=args.rank)
-        cudnn.benchmark = True
 
         logger.info("Loading data...")
         train_loader, val_loader, aux_data = self.load_data(args, logger)
@@ -256,12 +243,14 @@ class TorchEngine(Experiment):
 
     @staticmethod
     def setup_scheduler(args, optimizer):
-        if args.decay_mode == 'loss':
+        if args.scheduler == 'plateau':
             scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=args.lr_decay, patience=args.patience)
-        elif args.decay_mode == "step":
+        elif args.scheduler == "step":
             scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.patience, gamma=args.lr_decay)
-        elif args.decay_mode == "multistep":
+        elif args.scheduler == "multistep":
             scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.patience, gamma=args.lr_decay)
+        elif args.scheduler == "cosine":
+            scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.t_max)
         else:
             scheduler = None
         return scheduler
@@ -270,9 +259,9 @@ class TorchEngine(Experiment):
     def scheduler_step(args, scheduler, loss):
         if isinstance(loss, dict):
             loss = loss.get("avg", 0)
-        if args.decay_mode == "loss":
+        if args.scheduler == "plateau":
             scheduler.step(loss)
-        elif args.decay_mode == 'step' or args.decay_mode == 'multistep':
+        elif scheduler is not None:
             scheduler.step()
 
     @staticmethod
@@ -348,7 +337,7 @@ class TorchEngine(Experiment):
 
     @staticmethod
     def train_batch(batch_data, aux_data, model, criterion, optimizer, batch_id, args):
-        return 0, 0
+        return 0.0, 0.0
 
     def eval_epoch_wrapper(self, val_loader, aux_data, model, criterion, epoch, args, log_master):
         model.eval()
@@ -471,7 +460,7 @@ def accuracy(output, target, topk=(1,)):
 
 def get_sampler(args, dataset):
     if args.distributed:
-        train_sampler = torch.utils.data.distributed.DistributedSampler(dataset, num_replicas=args.world_size, rank=args.rank)
+        train_sampler = dist.DistributedSampler(dataset, num_replicas=args.world_size, rank=args.rank)
     else:
         train_sampler = None
     return train_sampler
