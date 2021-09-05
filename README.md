@@ -1,5 +1,11 @@
 # TorchBot: A premitive toolkit for playing with pytorch models
 
+## Features
+- Supports single gpu, DataParallel and Distributed DataParallel.
+- Supports logging to mlflow for tracking experiments.
+- Model loading/saving.
+- A bunch of utils for pytorch and python debugging.
+
 ## Requirements
 See `requirements.txt` for a full list.
 
