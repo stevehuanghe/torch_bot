@@ -28,7 +28,7 @@ import torch.distributed as dist
 import torch.optim as optim
 import torch.multiprocessing as mp
 import torch.utils.data
-import torch.utils.data.distributed as dist
+import torch.utils.data.distributed as datadist
 import torchvision
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
@@ -37,7 +37,7 @@ import torchvision.models as models
 
 from .experiment import Experiment
 from .py_logger import Logger, log_args
-
+from torchbot.utils.misc import clip_grad_norm
 
 class TorchEngine(Experiment):
 
@@ -321,12 +321,12 @@ class TorchEngine(Experiment):
 
         overall_loss = AverageMeter("overall")
         for i, data in enumerate(loader):
-            loss, avg_loss = self.train_batch(data, aux_data, model, criterion, optimizer, i, args)
+            loss_dict, avg_loss = self.train_batch(data, aux_data, model, criterion, optimizer, i, args)
 
             if i % args.log_freq == 0 and is_master(args):
-                mlflow.log_metrics(loss)
+                mlflow.log_metrics(loss_dict)
 
-            running_loss.update(loss)
+            running_loss.update(loss_dict)
             overall_loss.update(avg_loss)
 
         elapsed = (time.time() - start_time) / 60
@@ -337,7 +337,16 @@ class TorchEngine(Experiment):
 
     @staticmethod
     def train_batch(batch_data, aux_data, model, criterion, optimizer, batch_id, args):
-        return 0.0, 0.0
+        imgs, labels = batch_data
+        logits = model(imgs)
+        loss = criterion(logits, labels)
+        optimizer.zero_grad()
+        loss.backward()
+        clip_grad_norm(model.parameters, args.grad_clip)
+        optimizer.step()
+        loss_dict = {"loss", loss.item()}
+        loss = loss.item()
+        return loss_dict, loss
 
     def eval_epoch_wrapper(self, val_loader, aux_data, model, criterion, epoch, args, log_master):
         model.eval()
@@ -355,7 +364,7 @@ class TorchEngine(Experiment):
 
     @staticmethod
     def eval_epoch(val_loader, aux_data, model, criterion, epoch, args, log_master):
-        return 0
+        return 0.0
 
 
 class AverageMonitor(object):
@@ -460,7 +469,7 @@ def accuracy(output, target, topk=(1,)):
 
 def get_sampler(args, dataset):
     if args.distributed:
-        train_sampler = dist.DistributedSampler(dataset, num_replicas=args.world_size, rank=args.rank)
+        train_sampler = datadist.DistributedSampler(dataset, num_replicas=args.world_size, rank=args.rank)
     else:
         train_sampler = None
     return train_sampler

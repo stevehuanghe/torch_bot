@@ -15,6 +15,10 @@ from torch import nn
 
 from sklearn.metrics.pairwise import cosine_similarity
 
+def clip_grad_norm(params, max_norm):
+    if max_norm:
+        torch.nn.utils.clip_grad_norm_(params, max_norm)
+
 def detach(data):
     if isinstance(data, list):
         return [d.detach() for d in data]
@@ -495,7 +499,7 @@ def right_shift_packed_sequence_inds(lengths):
     return inds
 
 
-def clip_grad_norm(named_parameters, max_norm, clip=False, verbose=False):
+def manual_clip_grad_norm(named_parameters, max_norm, clip=False, verbose=False):
     r"""Clips gradient norm of an iterable of parameters.
 
     The norm is computed over all gradients together, as if they were

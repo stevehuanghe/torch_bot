@@ -24,3 +24,7 @@ See `requirements.txt` for a full list.
 
 3. Check mlflow logs:
 Open browser with `localhost:5000`
+
+
+## Core Files
+`torchbot/pipeline/engine.py`
