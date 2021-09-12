@@ -19,9 +19,22 @@ def clip_grad_norm(params, max_norm):
     if max_norm:
         torch.nn.utils.clip_grad_norm_(params, max_norm)
 
+def to_item(data):
+    if isinstance(data, list):
+        return [to_item(d) for d in data]
+    elif isinstance(data, dict):
+        res = dict()
+        for k,v in data.items():
+            res[k] = to_item(v)
+        return res
+    elif isinstance(data, torch.Tensor):
+        return data.item()
+    else:
+        return data
+
 def detach(data):
     if isinstance(data, list):
-        return [d.detach() for d in data]
+        return [detach(d) for d in data]
     elif isinstance(data, dict):
         res = {}
         for k,v in data.items():
@@ -30,11 +43,11 @@ def detach(data):
     elif isinstance(data, torch.Tensor):
         return data.detach()
     else:
-        raise TypeError(f"Unexpected type {type(data)}")
+        return data
 
 def to_device(data, device="cuda"):
     if isinstance(data, list):
-        return [d.to(device) for d in data]
+        return [to_device(d, device) for d in data]
     elif isinstance(data, dict):
         res = dict()
         for k,v in data.items():
@@ -43,7 +56,7 @@ def to_device(data, device="cuda"):
     elif isinstance(data, torch.Tensor):
         return data.to(device)
     else:
-        raise TypeError(f"Unexpected type {type(data)}")
+        return data
 
 def get_actual_model(net):
     if isinstance(net, nn.DataParallel):
@@ -289,19 +302,37 @@ def print_param(model, bias=False, names=True):
 
 
 def accuracy(output, target, topk=(1,)):
+    """Computes the accuracy over the k top predictions for the specified values of k"""
+    with torch.no_grad():
+        maxk = max(topk)
+        batch_size = target.size(0)
+
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+        res = []
+        for k in topk:
+            correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+            res.append(correct_k.mul_(100.0 / batch_size))
+        return res
+
+def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
-    maxk = max(topk)
-    batch_size = target.size(0)
+    with torch.no_grad():
+        maxk = max(topk)
+        batch_size = target.size(0)
 
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target.view(1, -1).expand_as(pred))
+        correct = correct.contiguous()
 
-    res = []
-    for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0)
-        res.append(correct_k.mul_(100.0 / batch_size))
-    return res
+        res = []
+        for k in topk:
+            correct_k = correct[:k].view(-1).float().sum().item()
+            res.append(correct_k * 100.0 / batch_size)
+        return res
 
 
 def nonintersecting_2d_inds(x):

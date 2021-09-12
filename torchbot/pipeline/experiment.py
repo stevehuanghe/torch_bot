@@ -37,7 +37,7 @@ def mkdir_safe(dir):
 class ExpPath(object):
     """docstring for ExpPath"""
 
-    def __init__(self, root_dir, dirs=['output', 'model_ckpts']):
+    def __init__(self, root_dir, dirs=['outputs', 'model_ckpts']):
         super(ExpPath, self).__init__()
         self.root_dir = Path(root_dir)
         self.time_s = get_datetime_str()
@@ -120,21 +120,29 @@ class Experiment(object):
         self.from_dir = exp_name
         parser = ArgParser()
         self.args = parser.get_args()
-        self.root_dir = self.args.result
+        self.root_dir = self.args.log_dir
+        self.output_dir = self.args.output_dir
         self.time_stamp = get_datetime_str()
         self.comment = comment
         if exp_name is not None:
             self.base_dir = Path(self.root_dir) / Path(exp_name) / Path(tag + self.time_stamp)
             self.mlflow_dir = Path(self.root_dir) / Path(exp_name)
+            self.output_dir = Path(self.output_dir) / Path(exp_name) / Path(tag + self.time_stamp)
         elif self.args.exp_name is not None:
             exp_name = self.args.exp_name
             self.base_dir = Path(self.root_dir) / Path(exp_name) / Path(tag + self.time_stamp)
             self.mlflow_dir = Path(self.root_dir) / Path(exp_name)
+            self.output_dir = Path(self.output_dir) / Path(exp_name) / Path(tag + self.time_stamp)
         else:
             self.base_dir = Path(self.root_dir) / Path(tag + self.time_stamp)
             self.mlflow_dir = self.base_dir
+            self.output_dir = Path(self.output_dir) / Path(tag + self.time_stamp)
 
-        self.paths = ExpPath(str(self.base_dir)).get_paths()
+        if self.args.run_name is None:
+            self.args.run_name = self.time_stamp
+        self.run_name = self.args.run_name
+
+        self.paths = ExpPath(str(self.output_dir)).get_paths()
         self.logfile = str(self.base_dir / Path(tag + 'logfile.txt'))
         self.log_master = Logger(self.logfile)
         self.param_file = Path(self.base_dir) / Path(tag + 'config.yaml')
@@ -183,12 +191,11 @@ class Experiment(object):
 
         mlflow.set_tracking_uri(self.mlflow_server)
         experiment_id = mlflow.set_experiment(str(self.mlflow_dir))
-        with mlflow.start_run(experiment_id=experiment_id):
+        with mlflow.start_run(experiment_id=experiment_id, run_name=self.run_name):
             #
             # Log the run parametres to mlflow.
             #
             mlflow.log_param("base_dir", str(self.base_dir))
-            mlflow.log_param("comment", self.comment)
 
             for k, v in sorted(vars(self.args).items()):
                 mlflow.log_param(k, v)

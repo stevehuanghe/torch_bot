@@ -8,8 +8,14 @@ class ArgParser(object):
         ################################ Protected #####################################
         parser.add_argument('-cf', '--config', metavar='FILE', default=None,
                             help='path to config file')
-        parser.add_argument('-r', '--result', metavar='DIR', default='./result',
-                            help='path to result directory')
+        parser.add_argument('--exp_name', metavar='STR', default=None,
+                            help='mlflow experiment name')
+        parser.add_argument('--run_name', metavar='STR', default=None,
+                            help='mlflow experiment run name')
+        parser.add_argument('-lg', '--log_dir', metavar='DIR', default='./outputs',
+                            help='path to log directory')
+        parser.add_argument('-od', '--output_dir', metavar='DIR', default='./outputs',
+                            help='path to output directory')
         parser.add_argument('--seed', metavar='INT', default=None, type=int,
                             help='random seed')
         parser.add_argument('-bs', '--batch_size', metavar='INT', default=512, type=int,
@@ -18,8 +24,12 @@ class ArgParser(object):
                             help='max epoch to train')
         parser.add_argument('--log_freq', metavar='INT', default=5, type=int,
                             help='number of steps for logging training loss')
+        parser.add_argument('--save_all', metavar='BOOL', default=False, type=bool,
+                            help='save model output every time')
         parser.add_argument('--save_epoch', metavar='INT', default=0, type=int,
                             help='save model every number of epochs')
+        parser.add_argument('--eval_epoch', metavar='INT', default=0, type=int,
+                            help='eval model every number of epochs')
         parser.add_argument('--resume', default='', type=str, metavar='PATH',
                             help='path to latest checkpoint (default: none)')
         parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
@@ -45,9 +55,11 @@ class ArgParser(object):
                                  'fastest way to use PyTorch for either single node or '
                                  'multi node data parallel training')
 
-        # training
-        parser.add_argument('--workers', metavar='INT', default=2, type=int,
+        # dataloader
+        parser.add_argument('--workers', metavar='INT', default=4, type=int,
                             help='number of wokers for dataloader')
+        parser.add_argument('--pin_memory', metavar='BOOL', default=False, type=bool,
+                            help='whether to pin memory')
 
         # optimization
         parser.add_argument('-lr', '--learning_rate', metavar='FLOAT', default=0.0001, type=float,
@@ -78,24 +90,8 @@ class ArgParser(object):
 
         ############################## custom args #####################################
         
-        # data
-        parser.add_argument('--dataset', default='mitstates', help='mitstates|zappos')
-        parser.add_argument('--data_dir', default='data/mit-states', help='data root dir')
-        parser.add_argument('--splitname', default='compositional-split-natural')
-        parser.add_argument('--test_set', default='val', help='val|test')
-        parser.add_argument('--pair_dropout', type=float, default=0.0,
-                            help='Each epoch drop this fraction of train pairs')
-        parser.add_argument('--pair_dropout_epoch', type=int, default=1,
-                            help='Shuffle pair dropout every N epochs')
-        parser.add_argument('--neg_ratio', type=float, default=0.25)
-        parser.add_argument('--subset', action='store_true', default=False,
-                            help='test on a 1000 image subset')
-        parser.add_argument('--num_negs', type=int, default=1,
-                            help='Number of negatives to sample per positive')
-        parser.add_argument('--word_dim', type=int, default=100,
-                            help='Dimension of word embeddings to load')
-        parser.add_argument('--img_size', type=int, default=128,
-                            help='Size of images')
+       
+        ############################## end of custom args ##############################
 
         self.parser = parser
 

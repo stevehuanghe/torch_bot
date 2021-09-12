@@ -1,0 +1,4 @@
+exp_name: example
+run_name: example_mnist
+eval_epoch: 1
+save_epoch: 1
