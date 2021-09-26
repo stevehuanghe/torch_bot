@@ -124,14 +124,13 @@ class TorchEngine(Experiment):
         train_loader, val_loader, aux_data = self.load_data(args, logger)
         logger.info("Setting up model/optim/etc...")
         model = self.setup_model(args, aux_data)
-        model = self.setup_distributed(args, model)
         criterion = self.setup_criterion(args)
         optimizer = self.setup_optimizer(args, model)
         model, optimizer, start_epoch, checkpoint = self.resume_model(args, model, optimizer, logger)
         scheduler = self.setup_scheduler(args, optimizer)
+        model = self.setup_distributed(args, model)
 
         best_metric = None
-
         if args.evaluate:
             logger.info("Evaluate only...")
             _, outputs = self.eval_epoch_wrapper(val_loader, aux_data, model, criterion, start_epoch, args, log_master)
@@ -149,7 +148,6 @@ class TorchEngine(Experiment):
             if args.eval_epoch > 0 and epoch % args.eval_epoch == 0:
                 if is_master(args):
                     logger.info(f"Epoch {epoch:3} evaluating...")
-
                 self.pre_eval_hook(val_loader, aux_data, model, criterion, epoch, args, log_master)
                 metric, outputs = self.eval_epoch_wrapper(val_loader, aux_data, model, criterion, epoch, args, log_master)
                 self.pos_eval_hook(val_loader, aux_data, model, criterion, epoch, args, log_master)
@@ -264,18 +262,14 @@ class TorchEngine(Experiment):
         checkpoint = dict()
         if args.resume:
             if os.path.isfile(args.resume):
-                logger.info("=> loading checkpoint '{}'".format(args.resume))
-                if args.gpu is None:
-                    checkpoint = torch.load(args.resume)
-                else:
-                    # Map model to be loaded to specified single gpu.
-                    loc = 'cuda:{}'.format(args.gpu)
-                    checkpoint = torch.load(args.resume, map_location=loc)
-                start_epoch = checkpoint['epoch']
-
-                model.load_state_dict(checkpoint['state_dict'])
-                optimizer.load_state_dict(checkpoint['optimizer'])
-                logger.info("=> loaded checkpoint '{}' (epoch {})"
+                logger.info("Loading checkpoint '{}'".format(args.resume))
+                checkpoint = torch.load(args.resume, map_location="cpu")
+                model.load_state_dict(checkpoint['model_state'])
+                if args.resume_optim:
+                    optimizer.load_state_dict(checkpoint['optim_state'])
+                if args.resume_epoch:
+                    start_epoch = checkpoint['epoch']
+                logger.info("Loaded checkpoint '{}' (epoch {})"
                             .format(args.resume, checkpoint['epoch']))
             else:
                 logger.info("=> no checkpoint found at '{}'".format(args.resume))
@@ -352,9 +346,6 @@ class TorchEngine(Experiment):
     def eval_epoch_wrapper(self, val_loader, aux_data, model, criterion, epoch, args, log_master):
         model.eval()
         logger = log_master.get_logger(f"eval")
-        if is_master(args):
-            logger.info("Start evaluating...")
-
         max_batch = len(val_loader)
         if is_master(args):
             loader = tqdm(val_loader, leave=False, ncols=70, unit='b', total=max_batch)

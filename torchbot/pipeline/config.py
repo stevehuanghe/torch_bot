@@ -32,6 +32,10 @@ class ArgParser(object):
                             help='eval model every number of epochs')
         parser.add_argument('--resume', default='', type=str, metavar='PATH',
                             help='path to latest checkpoint (default: none)')
+        parser.add_argument('--resume_epoch', default=True, type=bool, metavar='BOOL',
+                            help='whether to load epoch (default: True)')
+        parser.add_argument('--resume_optim', default=True, type=bool, metavar='BOOL',
+                            help='whether to load optimizer (default: True)')
         parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                             help='evaluate model on validation set')
         parser.add_argument('--pretrained', dest='pretrained', action='store_true',
